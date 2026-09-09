@@ -1,13 +1,24 @@
 [project]
 name = "agente-impressao-3d"
 version = "0.1.0"
-description = "Add your description here"
+description = "Deterministic STL analysis for FDM 3D-printing workflows"
 readme = "README.md"
 authors = [
     { name = "felipeafon", email = "felipe.anzai@hotmail.com" }
 ]
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+    "trimesh>=4.11,<5",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0,<10",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
 
 [project.scripts]
 agente-impressao-3d = "agente_impressao_3d:main"
