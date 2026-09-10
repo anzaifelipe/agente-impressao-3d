@@ -6,6 +6,7 @@ from typing import Protocol
 
 from .models import MeshInspection
 from .overhang import FaceMetricsBatch
+from .orientation import TriangleGeometryBatch
 
 
 class MeshInspector(Protocol):
@@ -20,3 +21,15 @@ class FaceMetricsReader(Protocol):
     def iter_face_metrics(
         self, source_path: Path, batch_size: int
     ) -> Iterator[FaceMetricsBatch]: ...
+
+
+class TriangleGeometrySource(Protocol):
+    """Provides repeatable, bounded-memory triangle batch iteration."""
+
+    def iter_triangle_batches(self, batch_size: int) -> Iterator[TriangleGeometryBatch]: ...
+
+
+class TriangleGeometryReader(Protocol):
+    """Opens one geometry source without exposing an implementation library."""
+
+    def open(self, source_path: Path) -> TriangleGeometrySource: ...
