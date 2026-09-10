@@ -22,7 +22,7 @@ testpaths = ["tests"]
 addopts = "-ra"
 
 [project.scripts]
-agente-impressao-3d = "agente_impressao_3d:main"
+agente-impressao-3d = "agente_impressao_3d.cli.main:main"
 
 [build-system]
 requires = ["uv_build>=0.12.11,<0.13.0"]
