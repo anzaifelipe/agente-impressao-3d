@@ -97,9 +97,8 @@ def run(
     args = build_parser().parse_args(argv)
     try:
         _validate_source(args.source)
-        plan, overhang = _execute_analysis(args, use_cases or default_use_cases())
+        plan = _execute_analysis(args, use_cases or default_use_cases())
         payload = plan.to_dict()
-        payload["analyses"]["overhang"] = overhang.to_dict()
         if args.output is None:
             json.dump(payload, output_stream, indent=2)
             output_stream.write("\n")
@@ -120,7 +119,7 @@ def _validate_source(source: Path) -> None:
         raise ValueError(f"source file was not found: {source}")
 
 
-def _execute_analysis(args: argparse.Namespace, use_cases: CliUseCases) -> tuple[object, object]:
+def _execute_analysis(args: argparse.Namespace, use_cases: CliUseCases) -> object:
     scale_defaults = ScaleAndUnitConfiguration()
     scale_configuration = ScaleAndUnitConfiguration(
         scale_factor=(args.scale_factor if args.scale_factor is not None else scale_defaults.scale_factor),
@@ -157,9 +156,9 @@ def _execute_analysis(args: argparse.Namespace, use_cases: CliUseCases) -> tuple
     )
     recommendation = use_cases.analyze_print_recommendation.execute(stl, orientation, recommendation_configuration)
     plan = use_cases.analyze_print_plan.execute(
-        stl, scale, build_volume, orientation, recommendation
+        stl, scale, build_volume, overhang, orientation, recommendation
     )
-    return plan, overhang
+    return plan
 
 
 def main() -> None:

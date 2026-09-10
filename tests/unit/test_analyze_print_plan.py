@@ -17,6 +17,12 @@ from agente_impressao_3d.domain.models import (
     Vector3,
     Volume,
 )
+from agente_impressao_3d.domain.overhang import (
+    OverhangAnalysisAssumptions,
+    OverhangAnalysisConfiguration,
+    OverhangAnalysisResult,
+    OverhangFacts,
+)
 from agente_impressao_3d.domain.orientation import (
     PRINCIPAL_ORIENTATIONS,
     OrientationAnalysisAssumptions,
@@ -43,6 +49,7 @@ def analyses() -> tuple[
     StlAnalysisResult,
     ScaleAndUnitAnalysisResult,
     BuildVolumeAnalysisResult,
+    OverhangAnalysisResult,
     OrientationAnalysisResult,
     PrintRecommendationResult,
 ]:
@@ -73,6 +80,12 @@ def analyses() -> tuple[
         ),
         assumptions=BuildVolumeAnalysisAssumptions(),
     )
+    overhang = OverhangAnalysisResult(
+        source_path=source_path,
+        facts=OverhangFacts(1, 0, 1.0, 0.0, 0.0),
+        configuration=OverhangAnalysisConfiguration(),
+        assumptions=OverhangAnalysisAssumptions(),
+    )
     candidate = OrientationCandidateResult(
         orientation=PRINCIPAL_ORIENTATIONS[4],
         facts=OrientationFacts(
@@ -102,7 +115,7 @@ def analyses() -> tuple[
         reasons=(),
         warnings=(),
     )
-    return stl, scale, build, orientation, recommendation
+    return stl, scale, build, overhang, orientation, recommendation
 
 
 def test_composes_the_same_result_instances() -> None:
@@ -113,8 +126,9 @@ def test_composes_the_same_result_instances() -> None:
     assert result.stl_analysis is inputs[0]
     assert result.scale_and_unit_analysis is inputs[1]
     assert result.build_volume_analysis is inputs[2]
-    assert result.orientation_analysis is inputs[3]
-    assert result.print_recommendation_analysis is inputs[4]
+    assert result.overhang_analysis is inputs[3]
+    assert result.orientation_analysis is inputs[4]
+    assert result.print_recommendation_analysis is inputs[5]
 
 
 def test_accepts_consistent_sources_and_serializes_composed_analyses() -> None:
@@ -124,12 +138,13 @@ def test_accepts_consistent_sources_and_serializes_composed_analyses() -> None:
     assert serialized["schema_version"] == "1.0"
     assert serialized["source"] == {"path": "example.stl", "format": "stl"}
     assert set(serialized["analyses"]) == {
-        "stl", "scale_and_unit", "build_volume", "orientation", "print_recommendation"
+        "stl", "scale_and_unit", "build_volume", "overhang", "orientation", "print_recommendation"
     }
+    assert serialized["analyses"]["overhang"] == result.overhang_analysis.to_dict()
     json.dumps(serialized)
 
 
-@pytest.mark.parametrize("index", [1, 2, 3, 4])
+@pytest.mark.parametrize("index", [1, 2, 3, 4, 5])
 def test_rejects_inconsistent_sources(index: int) -> None:
     inputs = list(analyses())
     inputs[index] = replace(inputs[index], source_path="other.stl")

@@ -7,6 +7,7 @@ from typing import Any
 
 from .build_volume import BuildVolumeAnalysisResult
 from .models import StlAnalysisResult
+from .overhang import OverhangAnalysisResult
 from .orientation import OrientationAnalysisResult
 from .print_recommendation import PrintRecommendationResult
 from .scale_and_unit import ScaleAndUnitAnalysisResult
@@ -19,6 +20,7 @@ class PrintPlanAnalysisResult:
     stl_analysis: StlAnalysisResult
     scale_and_unit_analysis: ScaleAndUnitAnalysisResult
     build_volume_analysis: BuildVolumeAnalysisResult
+    overhang_analysis: OverhangAnalysisResult
     orientation_analysis: OrientationAnalysisResult
     print_recommendation_analysis: PrintRecommendationResult
     schema_version: str = "1.0"
@@ -31,6 +33,7 @@ class PrintPlanAnalysisResult:
                 "stl": self.stl_analysis.to_dict(),
                 "scale_and_unit": self.scale_and_unit_analysis.to_dict(),
                 "build_volume": self.build_volume_analysis.to_dict(),
+                "overhang": self.overhang_analysis.to_dict(),
                 "orientation": self.orientation_analysis.to_dict(),
                 "print_recommendation": self.print_recommendation_analysis.to_dict(),
             },

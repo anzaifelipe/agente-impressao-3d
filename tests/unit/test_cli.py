@@ -20,17 +20,22 @@ class FakeCase:
 
 class FakePlan:
     def to_dict(self) -> dict[str, object]:
-        return {"schema_version": "1.0", "source": {"path": "model.stl"}, "analyses": {}}
-
-
-class FakeOverhang:
-    def to_dict(self) -> dict[str, object]:
-        return {"schema_version": "1.0", "facts": {"overhang_face_count": 0}}
+        return {
+            "schema_version": "1.0",
+            "source": {"path": "model.stl"},
+            "analyses": {
+                "overhang": {
+                    "schema_version": "1.0",
+                    "facts": {"overhang_face_count": 0},
+                }
+            },
+        }
 
 
 def fake_use_cases(calls: list[tuple[object, ...]]) -> CliUseCases:
-    stl, scale, build, orientation, recommendation, plan = (object() for _ in range(6))
-    overhang = FakeOverhang()
+    stl, scale, build, overhang, orientation, recommendation, plan = (
+        object() for _ in range(7)
+    )
     return CliUseCases(
         FakeCase(stl, calls), FakeCase(scale, calls), FakeCase(build, calls),
         FakeCase(overhang, calls), FakeCase(orientation, calls),
@@ -50,13 +55,14 @@ def test_parser_and_cli_build_configs_run_full_flow_and_write_json(tmp_path: Pat
     source.touch()
     calls: list[tuple[object, ...]] = []
     stdout = io.StringIO()
+    use_cases = fake_use_cases(calls)
     code = run(
         arguments(
             source, "--build-volume-unit", "mm", "--scale-factor", "100",
             "--physical-unit", "mm", "--overhang-threshold", "30", "--batch-size", "10",
             "--max-recommended-overhang", "25",
         ),
-        use_cases=fake_use_cases(calls), stdout=stdout, stderr=io.StringIO(),
+        use_cases=use_cases, stdout=stdout, stderr=io.StringIO(),
     )
 
     assert code == 0
@@ -75,6 +81,7 @@ def test_parser_and_cli_build_configs_run_full_flow_and_write_json(tmp_path: Pat
     assert overhang_configuration.batch_size == 10
     assert orientation_configuration.scale_and_unit is scale_configuration
     assert recommendation_configuration.maximum_recommended_overhang_area_percentage == 25
+    assert calls[6][3] is use_cases.analyze_overhang.result
 
 
 def test_output_option_saves_json_without_mixing_json_into_stdout(tmp_path: Path) -> None:

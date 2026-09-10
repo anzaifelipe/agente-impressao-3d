@@ -81,7 +81,7 @@ Não há busca de rotações arbitrárias.
 
 ### Print Plan
 
-`AnalyzePrintPlan` é um envelope composicional de STL, escala/unidade, volume, orientação e recomendação. Ele valida a fonte comum e não recalcula fatos ou decisões.
+`AnalyzePrintPlan` é o envelope canônico de STL, escala/unidade, volume, overhang, orientação e recomendação. Ele valida a fonte comum e não recalcula fatos ou decisões.
 
 ## CLI
 
@@ -137,7 +137,7 @@ Cada capability possui `to_dict()`. A CLI serializa o envelope final:
 }
 ```
 
-O contrato de `PrintPlanAnalysisResult` permanece focado em seus cinco subresultados. A CLI acrescenta o resultado especializado de overhang ao JSON final por meio de `OverhangAnalysisResult.to_dict()`, sem recalcular ou copiar fatos manualmente.
+`PrintPlanAnalysisResult` inclui todos os resultados especializados. A CLI apenas executa o fluxo e serializa `print_plan.to_dict()`.
 
 ## Performance e limitações
 
