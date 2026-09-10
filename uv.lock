@@ -7,6 +7,7 @@ name = "agente-impressao-3d"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "numpy" },
     { name = "trimesh" },
 ]
 
@@ -16,7 +17,10 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "trimesh", specifier = ">=4.11,<5" }]
+requires-dist = [
+    { name = "numpy", specifier = ">=2.0,<3" },
+    { name = "trimesh", specifier = ">=4.11,<5" },
+]
 
 [package.metadata.requires-dev]
 dev = [{ name = "pytest", specifier = ">=9.0,<10" }]

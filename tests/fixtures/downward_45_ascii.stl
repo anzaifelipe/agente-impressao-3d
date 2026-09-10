@@ -1,0 +1,9 @@
+solid downward_45
+  facet normal -0.70710678 0 -0.70710678
+    outer loop
+      vertex 0 0 0
+      vertex 0 1 0
+      vertex 1 0 -1
+    endloop
+  endfacet
+endsolid downward_45
