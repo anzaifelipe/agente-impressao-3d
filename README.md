@@ -12,26 +12,32 @@ Os cálculos determinísticos são separados de uma futura camada de IA: um agen
 - `cli`: adapter de entrada com `argparse`, responsável apenas por argumentos, dependências e JSON.
 
 ```text
-                         STL
-                          │
-          ┌───────────────┼────────────────┐
-          ▼               ▼                ▼
-     AnalyzeStl     AnalyzeOverhang  AnalyzeOrientation
-          │                                │
-          ▼                                │
- AnalyzeScaleAndUnit                       │
-          │                                │
-          ▼                                │
- AnalyzeBuildVolume                        │
-          └────────────────┬───────────────┘
-                           ▼
-              AnalyzePrintRecommendation
-                           │
-                           ▼
-                  AnalyzePrintPlan
-                           │
-                           ▼
-                          JSON
+       AnalyzeStl
+            │
+            ▼
+ AnalyzeScaleAndUnit
+            │
+            ▼
+ AnalyzeBuildVolume
+            │
+            ├─────────────────┐
+            │                 │
+            ▼                 ▼
+ AnalyzeOrientation     AnalyzeOverhang
+            │                 │
+            ▼                 │
+ AnalyzePrintRecommendation  │
+            │                 │
+            └────────┬────────┘
+                     ▼
+            AnalyzePrintPlan
+                     │
+                     ▼
+          SummarizePrintPlan
+                     │
+                     ├─────────────┐
+                     ▼             ▼
+                    CLI      Futuro Agente/API/UI
 ```
 
 ## Funcionalidades
@@ -82,6 +88,12 @@ Não há busca de rotações arbitrárias.
 ### Print Plan
 
 `AnalyzePrintPlan` é o envelope canônico de STL, escala/unidade, volume, overhang, orientação e recomendação. Ele valida a fonte comum e não recalcula fatos ou decisões.
+
+### Print Plan Summary
+
+`SummarizePrintPlan` recebe exclusivamente um `PrintPlanAnalysisResult` e produz um `PrintPlanSummaryResult` compacto, JSON-friendly e independente da CLI. Ele organiza dimensões físicas, compatibilidade com o volume, orientação e altura recomendadas, overhang, status da recomendação e warnings com origem explícita.
+
+O `PrintPlanAnalysisResult` continua sendo o resultado técnico completo, com todos os subresultados especializados. O `PrintPlanSummaryResult` é uma visão para pessoas e interfaces: não acessa arquivos, não recalcula geometria, overhang ou ranking, não cria uma recomendação nova e não substitui o plano técnico.
 
 ## CLI
 
