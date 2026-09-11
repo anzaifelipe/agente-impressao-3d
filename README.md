@@ -70,6 +70,29 @@ Os schemas são validados de forma mínima e explícita para as quatro ferrament
 
 `analyze_print_plan` recebe ao menos `{"path": "..."}` e pode receber `printer_profile`, `scale_factor`, `physical_unit`, `overhang_threshold`, `batch_size` e `max_recommended_overhang`. Ele chama a orquestração de aplicação que reutiliza `AnalyzeStl`, escala/unidade, volume, overhang, orientação, recomendação e `AnalyzePrintPlan`; não chama a CLI ou subprocessos.
 
+## Orquestração determinística
+
+Esta camada não é um agente de IA: não utiliza LLM, prompts, memória, planejamento, rede ou Hermes. Ela recebe uma intenção estruturada, faz uma única seleção determinística de ferramenta, executa-a e trata o retorno como uma observation.
+
+```text
+Request → Action Selection → Tool Selection → Tool Execution → Observation → Result
+```
+
+O contrato de request é `{"action": "...", "arguments": {...}}`. As ações disponíveis e seu mapeamento explícito são:
+
+- `list_printer_profiles` → `list_printer_profiles`
+- `get_configuration` → `get_cli_configuration`
+- `set_default_printer_profile` → `set_default_printer_profile`
+- `analyze_model` → `analyze_print_plan`
+
+O resultado preserva a intenção e a ferramenta selecionada:
+
+```json
+{"ok": true, "action": "analyze_model", "tool": "analyze_print_plan", "result": {}}
+```
+
+Uma ação desconhecida retorna `UNKNOWN_ACTION` antes de chamar a Tool Layer. Para ações conhecidas, erros estruturados da ferramenta, como `INVALID_TOOL_ARGUMENTS` ou `UNKNOWN_PRINTER_PROFILE`, são preservados no resultado. A camada é preparada para um futuro adapter de orquestração baseado em IA, como Hermes, sem acoplar o núcleo a esse framework.
+
 ## Funcionalidades
 
 ### Análise STL
