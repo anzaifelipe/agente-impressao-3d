@@ -10,6 +10,7 @@ Os cálculos determinísticos são separados de uma futura camada de IA: um agen
 - `application`: casos de uso e políticas determinísticas; não importa `trimesh`.
 - `infrastructure`: adapters `trimesh` e catálogos embutidos, implementando portas do domínio.
 - `cli`: adapter de entrada com `argparse`, responsável por argumentos, dependências e apresentação.
+- `tools`: adapters estruturados para futuras integrações de agentes; não são um agente e não dependem da CLI.
 
 ```text
        AnalyzeStl
@@ -39,6 +40,35 @@ Os cálculos determinísticos são separados de uma futura camada de IA: um agen
                      ▼             ▼
                     CLI      Futuro Agente/API/UI
 ```
+
+## Tool Layer
+
+A Tool Layer explícita adapta capabilities selecionadas da aplicação para consumidores estruturados, como um futuro adapter para Hermes ou outro orquestrador. Ela não implementa Hermes, LLM, rede, API ou memória de agente.
+
+Cada ferramenta expõe `name`, `description`, `input_schema` e `handler`. O registro é estático e pode ser obtido por `build_tools(...)`; a execução ocorre por `execute_tool(tools, name, arguments)`.
+
+Ferramentas disponíveis:
+
+- `list_printer_profiles`
+- `get_cli_configuration`
+- `set_default_printer_profile`
+- `analyze_print_plan`
+
+O contrato de sucesso é:
+
+```json
+{"ok": true, "result": {}}
+```
+
+E erros previsíveis usam:
+
+```json
+{"ok": false, "error": {"code": "INVALID_TOOL_ARGUMENTS", "message": "..."}}
+```
+
+Os schemas são validados de forma mínima e explícita para as quatro ferramentas: campos obrigatórios, tipos básicos e propriedades inesperadas. Erros conhecidos da aplicação, como perfil inexistente e configuração ausente, recebem códigos estruturados; erros inesperados continuam visíveis ao integrador em vez de serem mascarados como sucesso.
+
+`analyze_print_plan` recebe ao menos `{"path": "..."}` e pode receber `printer_profile`, `scale_factor`, `physical_unit`, `overhang_threshold`, `batch_size` e `max_recommended_overhang`. Ele chama a orquestração de aplicação que reutiliza `AnalyzeStl`, escala/unidade, volume, overhang, orientação, recomendação e `AnalyzePrintPlan`; não chama a CLI ou subprocessos.
 
 ## Funcionalidades
 

@@ -18,6 +18,9 @@ from agente_impressao_3d.application.analyze_print_recommendation import (
 )
 from agente_impressao_3d.application.analyze_scale_and_unit import AnalyzeScaleAndUnit
 from agente_impressao_3d.application.analyze_stl import AnalyzeStl
+from agente_impressao_3d.application.execute_print_plan_analysis import (
+    ExecutePrintPlanAnalysis,
+)
 from agente_impressao_3d.application.get_printer_profile import GetPrinterProfile
 from agente_impressao_3d.application.list_printer_profiles import ListPrinterProfiles
 from agente_impressao_3d.application.cli_configuration import (
@@ -198,18 +201,22 @@ def _execute_analysis(args: argparse.Namespace, use_cases: CliUseCases) -> objec
         maximum_recommended_overhang_area_percentage=args.max_recommended_overhang
     )
 
-    stl = use_cases.analyze_stl.execute(args.source)
-    scale = use_cases.analyze_scale_and_unit.execute(stl, scale_configuration)
-    build_volume = use_cases.analyze_build_volume.execute(scale, printer_profile)
-    overhang = use_cases.analyze_overhang.execute(args.source, overhang_configuration)
-    orientation = use_cases.analyze_orientation.execute(
-        args.source, printer_profile, orientation_configuration
+    return ExecutePrintPlanAnalysis(
+        use_cases.analyze_stl,
+        use_cases.analyze_scale_and_unit,
+        use_cases.analyze_build_volume,
+        use_cases.analyze_overhang,
+        use_cases.analyze_orientation,
+        use_cases.analyze_print_recommendation,
+        use_cases.analyze_print_plan,
+    ).execute(
+        args.source,
+        printer_profile,
+        scale_configuration,
+        overhang_configuration,
+        orientation_configuration,
+        recommendation_configuration,
     )
-    recommendation = use_cases.analyze_print_recommendation.execute(stl, orientation, recommendation_configuration)
-    plan = use_cases.analyze_print_plan.execute(
-        stl, scale, build_volume, overhang, orientation, recommendation
-    )
-    return plan
 
 
 def _run_config_command(
