@@ -20,6 +20,11 @@ from agente_impressao_3d.application.analyze_scale_and_unit import AnalyzeScaleA
 from agente_impressao_3d.application.analyze_stl import AnalyzeStl
 from agente_impressao_3d.application.get_printer_profile import GetPrinterProfile
 from agente_impressao_3d.application.list_printer_profiles import ListPrinterProfiles
+from agente_impressao_3d.application.cli_configuration import (
+    GetCliConfiguration,
+    InitializeCliConfiguration,
+    SetDefaultPrinterProfile,
+)
 from agente_impressao_3d.application.summarize_print_plan import SummarizePrintPlan
 from agente_impressao_3d.domain.models import Vector3
 from agente_impressao_3d.domain.orientation import OrientationAnalysisConfiguration
@@ -37,6 +42,10 @@ from agente_impressao_3d.infrastructure.trimesh_triangle_geometry_reader import 
 )
 from agente_impressao_3d.infrastructure.built_in_printer_profiles import (
     BuiltInPrinterProfileReader,
+)
+from agente_impressao_3d.infrastructure.json_cli_configuration_store import (
+    JsonCliConfigurationStore,
+    default_cli_configuration_path,
 )
 
 
@@ -58,6 +67,9 @@ class CliUseCases:
     summarize_print_plan: Executable
     get_printer_profile: Executable
     list_printer_profiles: Executable
+    get_cli_configuration: Executable
+    initialize_cli_configuration: Executable
+    set_default_printer_profile: Executable
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -67,6 +79,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
     subparsers.add_parser("printers", help="list available reusable printer profiles")
+    config = subparsers.add_parser("config", help="manage persistent CLI configuration")
+    config_subparsers = config.add_subparsers(dest="config_command", required=True)
+    config_subparsers.add_parser("init", help="create an empty configuration")
+    config_subparsers.add_parser("show", help="write the current configuration as JSON")
+    set_printer = config_subparsers.add_parser(
+        "set-printer", help="set the default printer profile"
+    )
+    set_printer.add_argument("profile_id")
     analyze = subparsers.add_parser("analyze", help="analyze one STL model")
     analyze.add_argument("source", type=Path, help="path to an STL file")
     analyze.add_argument("--printer", help="stable identifier of a built-in printer profile")
@@ -87,6 +107,7 @@ def build_parser() -> argparse.ArgumentParser:
 def default_use_cases() -> CliUseCases:
     """Wire application cases to infrastructure adapters only at the input edge."""
     profile_reader = BuiltInPrinterProfileReader()
+    configuration_store = JsonCliConfigurationStore(default_cli_configuration_path())
     return CliUseCases(
         analyze_stl=AnalyzeStl(TrimeshMeshInspector()),
         analyze_scale_and_unit=AnalyzeScaleAndUnit(),
@@ -98,6 +119,11 @@ def default_use_cases() -> CliUseCases:
         summarize_print_plan=SummarizePrintPlan(),
         get_printer_profile=GetPrinterProfile(profile_reader),
         list_printer_profiles=ListPrinterProfiles(profile_reader),
+        get_cli_configuration=GetCliConfiguration(configuration_store),
+        initialize_cli_configuration=InitializeCliConfiguration(configuration_store),
+        set_default_printer_profile=SetDefaultPrinterProfile(
+            configuration_store, profile_reader
+        ),
     )
 
 
@@ -119,6 +145,8 @@ def run(
                 format_printer_profiles(active_use_cases.list_printer_profiles.execute())
             )
             return 0
+        if args.command == "config":
+            return _run_config_command(args, active_use_cases, output_stream)
         if args.json and args.output is not None:
             raise ValueError("--json and --output cannot be used together")
         _validate_source(args.source)
@@ -184,6 +212,25 @@ def _execute_analysis(args: argparse.Namespace, use_cases: CliUseCases) -> objec
     return plan
 
 
+def _run_config_command(
+    args: argparse.Namespace, use_cases: CliUseCases, output_stream: TextIO
+) -> int:
+    if args.config_command == "init":
+        use_cases.initialize_cli_configuration.execute()
+        output_stream.write("CLI configuration initialized.\n")
+    elif args.config_command == "show":
+        configuration = use_cases.get_cli_configuration.execute()
+        json.dump(configuration.to_dict(), output_stream, indent=2)
+        output_stream.write("\n")
+    else:
+        configuration = use_cases.set_default_printer_profile.execute(args.profile_id)
+        output_stream.write(
+            "Default printer profile set to: "
+            f"{configuration.default_printer_profile}\n"
+        )
+    return 0
+
+
 def _resolve_printer_profile(
     args: argparse.Namespace, use_cases: CliUseCases
 ) -> PrinterProfile:
@@ -201,22 +248,37 @@ def _resolve_printer_profile(
             )
         return use_cases.get_printer_profile.execute(args.printer)
 
-    if not all(
-        value is not None
-        for value in (args.printer_manufacturer, args.printer_model, args.build_volume)
-    ):
+    if has_manual_values:
+        if not all(
+            value is not None
+            for value in (
+                args.printer_manufacturer,
+                args.printer_model,
+                args.build_volume,
+            )
+        ):
+            raise ValueError(
+                "manual printer profiles require --printer-manufacturer, "
+                "--printer-model, and --build-volume arguments"
+            )
+        profile_options: dict[str, object] = {
+            "manufacturer": args.printer_manufacturer,
+            "model": args.printer_model,
+            "build_volume": Vector3(*args.build_volume),
+        }
+        if args.build_volume_unit is not None:
+            profile_options["build_volume_unit"] = args.build_volume_unit
+        return PrinterProfile(**profile_options)
+
+    configuration = use_cases.get_cli_configuration.execute()
+    if configuration.default_printer_profile is None:
         raise ValueError(
-            "provide --printer or manual --printer-manufacturer, --printer-model, "
-            "and --build-volume arguments"
+            "no default printer profile is configured; use --printer, manual printer "
+            "profile arguments, or 'agente-impressao-3d config set-printer'."
         )
-    profile_options: dict[str, object] = {
-        "manufacturer": args.printer_manufacturer,
-        "model": args.printer_model,
-        "build_volume": Vector3(*args.build_volume),
-    }
-    if args.build_volume_unit is not None:
-        profile_options["build_volume_unit"] = args.build_volume_unit
-    return PrinterProfile(**profile_options)
+    return use_cases.get_printer_profile.execute(
+        configuration.default_printer_profile
+    )
 
 
 def format_printer_profiles(entries: tuple[PrinterProfileEntry, ...]) -> str:

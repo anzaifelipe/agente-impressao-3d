@@ -8,6 +8,7 @@ from .models import MeshInspection
 from .overhang import FaceMetricsBatch
 from .orientation import TriangleGeometryBatch
 from .printer_profile import PrinterProfile, PrinterProfileEntry
+from .cli_configuration import CliConfiguration
 
 
 class MeshInspector(Protocol):
@@ -42,3 +43,13 @@ class PrinterProfileReader(Protocol):
     def get_profile(self, profile_id: str) -> PrinterProfile | None: ...
 
     def list_profiles(self) -> tuple[PrinterProfileEntry, ...]: ...
+
+
+class CliConfigurationStore(Protocol):
+    """Persists domain configuration without exposing serialization details."""
+
+    def load(self) -> CliConfiguration | None: ...
+
+    def initialize(self, configuration: CliConfiguration) -> bool: ...
+
+    def save(self, configuration: CliConfiguration) -> None: ...

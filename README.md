@@ -62,6 +62,25 @@ Perfis disponíveis inicialmente:
 
 - `bambu-lab-a1-mini` — Bambu Lab A1 Mini, 180 × 180 × 180 mm.
 
+### Configuração persistente da CLI
+
+`CliConfiguration` contém somente a versão do schema e o perfil padrão de impressora. Ela é persistida pela infraestrutura em JSON; domínio e application não conhecem JSON, caminhos do sistema ou `argparse`.
+
+Inicialize a configuração uma única vez e escolha um perfil padrão:
+
+```bash
+uv run agente-impressao-3d config init
+uv run agente-impressao-3d config set-printer bambu-lab-a1-mini
+```
+
+Consulte a configuração atual em JSON:
+
+```bash
+uv run agente-impressao-3d config show
+```
+
+`config init` não sobrescreve uma configuração existente. `config set-printer` valida o identificador no catálogo embutido e cria a configuração caso ela ainda não exista; ao atualizar, preserva os demais campos para evolução futura.
+
 ### Overhang
 
 `AnalyzeOverhang` processa faces em batches vetorizados. Informa contagens, área total, área de overhang e percentual usando um threshold configurável. A condição é equivalente a:
@@ -136,6 +155,8 @@ uv run agente-impressao-3d analyze /caminho/modelo.stl \
 ```
 
 O resumo apresenta status, dimensões físicas, compatibilidade com o volume, orientação e altura recomendadas, overhang e avisos. Ele é apenas uma apresentação e não recalcula resultados.
+
+Quando nenhum perfil é informado no comando `analyze`, a CLI usa o `default_printer_profile` persistido. A precedência é: `--printer` explícito, perfil manual completo, configuração persistente e, por fim, erro previsível. Argumentos explícitos nunca modificam a configuração. `--printer` continua incompatível com argumentos manuais de perfil.
 
 ### JSON técnico
 

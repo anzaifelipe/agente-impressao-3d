@@ -1,11 +1,13 @@
 import io
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
 from agente_impressao_3d.cli.main import CliUseCases, build_parser, run
 from agente_impressao_3d.domain.models import Vector3
+from agente_impressao_3d.domain.cli_configuration import CliConfiguration
 from agente_impressao_3d.domain.printer_profile import PrinterProfile, PrinterProfileEntry
 from agente_impressao_3d.domain.print_plan_summary import (
     PrintPlanSummaryFacts,
@@ -61,7 +63,7 @@ def summary(
 
 def fake_use_cases(
     calls: list[tuple[object, ...]], result_summary: PrintPlanSummaryResult | None = None,
-    profile: PrinterProfile | None = None,
+    profile: PrinterProfile | None = None, configuration: CliConfiguration | None = None,
 ) -> CliUseCases:
     stl, scale, build, overhang, orientation, recommendation = (
         object() for _ in range(6)
@@ -73,6 +75,9 @@ def fake_use_cases(
         FakeCase(result_summary or summary(), calls),
         FakeCase(profile or PrinterProfile("Bambu Lab", "A1 Mini", Vector3(180, 180, 180)), calls),
         FakeCase((PrinterProfileEntry("bambu-lab-a1-mini", PrinterProfile("Bambu Lab", "A1 Mini", Vector3(180, 180, 180))),), calls),
+        FakeCase(configuration or CliConfiguration(), calls),
+        FakeCase(CliConfiguration(), calls),
+        FakeCase(CliConfiguration(default_printer_profile="bambu-lab-a1-mini"), calls),
     )
 
 
@@ -216,6 +221,29 @@ def test_printers_lists_built_in_entries_from_the_list_use_case() -> None:
     assert calls == [()]
 
 
+def test_config_init_show_and_set_printer_use_explicit_configuration_cases() -> None:
+    calls: list[tuple[object, ...]] = []
+    use_cases = fake_use_cases(
+        calls, configuration=CliConfiguration(default_printer_profile="bambu-lab-a1-mini")
+    )
+
+    initialized = io.StringIO()
+    assert run(["config", "init"], use_cases=use_cases, stdout=initialized, stderr=io.StringIO()) == 0
+    assert initialized.getvalue() == "CLI configuration initialized.\n"
+
+    shown = io.StringIO()
+    assert run(["config", "show"], use_cases=use_cases, stdout=shown, stderr=io.StringIO()) == 0
+    assert json.loads(shown.getvalue()) == {
+        "schema_version": "1.0",
+        "default_printer_profile": "bambu-lab-a1-mini",
+    }
+
+    updated = io.StringIO()
+    assert run(["config", "set-printer", "bambu-lab-a1-mini"], use_cases=use_cases, stdout=updated, stderr=io.StringIO()) == 0
+    assert "Default printer profile set to: bambu-lab-a1-mini" in updated.getvalue()
+    assert calls == [(), (), ("bambu-lab-a1-mini",)]
+
+
 def test_analyze_with_known_profile_resolves_it_before_the_pipeline(
     tmp_path: Path,
 ) -> None:
@@ -235,22 +263,38 @@ def test_analyze_with_known_profile_resolves_it_before_the_pipeline(
     )
 
 
+def test_analyze_uses_persisted_default_when_no_profile_argument_is_given(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "model.stl"
+    source.touch()
+    calls: list[tuple[object, ...]] = []
+
+    code = run(
+        ["analyze", str(source), "--json"],
+        use_cases=fake_use_cases(
+            calls,
+            configuration=CliConfiguration(default_printer_profile="bambu-lab-a1-mini"),
+        ),
+        stdout=io.StringIO(), stderr=io.StringIO(),
+    )
+
+    assert code == 0
+    assert calls[0] == ()
+    assert calls[1] == ("bambu-lab-a1-mini",)
+    assert calls[4][1].model == "A1 Mini"
+
+
 def test_unknown_profile_reports_error_without_running_analysis(tmp_path: Path) -> None:
     source = tmp_path / "model.stl"
     source.touch()
     calls: list[tuple[object, ...]] = []
     use_cases = fake_use_cases(calls)
-    use_cases = CliUseCases(
-        *(
-            getattr(use_cases, field)
-            for field in (
-                "analyze_stl", "analyze_scale_and_unit", "analyze_build_volume",
-                "analyze_overhang", "analyze_orientation", "analyze_print_recommendation",
-                "analyze_print_plan", "summarize_print_plan",
-            )
+    use_cases = replace(
+        use_cases,
+        get_printer_profile=FailingCase(
+            ValueError("unknown printer profile: missing-printer"), calls
         ),
-        FailingCase(ValueError("unknown printer profile: missing-printer"), calls),
-        use_cases.list_printer_profiles,
     )
     stderr = io.StringIO()
 
@@ -294,8 +338,8 @@ def test_requires_a_known_or_complete_manual_printer_profile(tmp_path: Path) -> 
     )
 
     assert code == 2
-    assert "provide --printer or manual" in stderr.getvalue()
-    assert calls == []
+    assert "no default printer profile is configured" in stderr.getvalue()
+    assert calls == [()]
 
 
 def test_parser_and_cli_build_configs_run_full_flow(tmp_path: Path) -> None:
