@@ -18,18 +18,25 @@ from agente_impressao_3d.application.analyze_print_recommendation import (
 )
 from agente_impressao_3d.application.analyze_scale_and_unit import AnalyzeScaleAndUnit
 from agente_impressao_3d.application.analyze_stl import AnalyzeStl
+from agente_impressao_3d.application.get_printer_profile import GetPrinterProfile
+from agente_impressao_3d.application.list_printer_profiles import ListPrinterProfiles
+from agente_impressao_3d.application.summarize_print_plan import SummarizePrintPlan
 from agente_impressao_3d.domain.models import Vector3
 from agente_impressao_3d.domain.orientation import OrientationAnalysisConfiguration
 from agente_impressao_3d.domain.overhang import OverhangAnalysisConfiguration
 from agente_impressao_3d.domain.print_recommendation import PrintRecommendationConfiguration
-from agente_impressao_3d.domain.printer_profile import PrinterProfile
+from agente_impressao_3d.domain.printer_profile import PrinterProfile, PrinterProfileEntry
 from agente_impressao_3d.domain.scale_and_unit import ScaleAndUnitConfiguration
+from agente_impressao_3d.domain.print_plan_summary import PrintPlanSummaryResult
 from agente_impressao_3d.infrastructure.trimesh_face_metrics_reader import (
     TrimeshFaceMetricsReader,
 )
 from agente_impressao_3d.infrastructure.trimesh_inspector import TrimeshMeshInspector
 from agente_impressao_3d.infrastructure.trimesh_triangle_geometry_reader import (
     TrimeshTriangleGeometryReader,
+)
+from agente_impressao_3d.infrastructure.built_in_printer_profiles import (
+    BuiltInPrinterProfileReader,
 )
 
 
@@ -48,31 +55,38 @@ class CliUseCases:
     analyze_orientation: Executable
     analyze_print_recommendation: Executable
     analyze_print_plan: Executable
+    summarize_print_plan: Executable
+    get_printer_profile: Executable
+    list_printer_profiles: Executable
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="agente-impressao-3d",
-        description="Run deterministic STL print analysis and emit a JSON print plan.",
+        description="Run deterministic STL print analysis.",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
+    subparsers.add_parser("printers", help="list available reusable printer profiles")
     analyze = subparsers.add_parser("analyze", help="analyze one STL model")
     analyze.add_argument("source", type=Path, help="path to an STL file")
-    analyze.add_argument("--printer-manufacturer", required=True)
-    analyze.add_argument("--printer-model", required=True)
-    analyze.add_argument("--build-volume", nargs=3, type=float, metavar=("X", "Y", "Z"), required=True)
+    analyze.add_argument("--printer", help="stable identifier of a built-in printer profile")
+    analyze.add_argument("--printer-manufacturer")
+    analyze.add_argument("--printer-model")
+    analyze.add_argument("--build-volume", nargs=3, type=float, metavar=("X", "Y", "Z"))
     analyze.add_argument("--build-volume-unit")
     analyze.add_argument("--scale-factor", type=float)
     analyze.add_argument("--physical-unit")
     analyze.add_argument("--overhang-threshold", type=float)
     analyze.add_argument("--batch-size", type=int)
     analyze.add_argument("--max-recommended-overhang", type=float)
+    analyze.add_argument("--json", action="store_true", help="write the full technical print plan as JSON to stdout")
     analyze.add_argument("--output", type=Path)
     return parser
 
 
 def default_use_cases() -> CliUseCases:
     """Wire application cases to infrastructure adapters only at the input edge."""
+    profile_reader = BuiltInPrinterProfileReader()
     return CliUseCases(
         analyze_stl=AnalyzeStl(TrimeshMeshInspector()),
         analyze_scale_and_unit=AnalyzeScaleAndUnit(),
@@ -81,6 +95,9 @@ def default_use_cases() -> CliUseCases:
         analyze_orientation=AnalyzeOrientation(TrimeshTriangleGeometryReader()),
         analyze_print_recommendation=AnalyzePrintRecommendation(),
         analyze_print_plan=AnalyzePrintPlan(),
+        summarize_print_plan=SummarizePrintPlan(),
+        get_printer_profile=GetPrinterProfile(profile_reader),
+        list_printer_profiles=ListPrinterProfiles(profile_reader),
     )
 
 
@@ -96,16 +113,29 @@ def run(
     error_stream = stderr or sys.stderr
     args = build_parser().parse_args(argv)
     try:
+        active_use_cases = use_cases or default_use_cases()
+        if args.command == "printers":
+            output_stream.write(
+                format_printer_profiles(active_use_cases.list_printer_profiles.execute())
+            )
+            return 0
+        if args.json and args.output is not None:
+            raise ValueError("--json and --output cannot be used together")
         _validate_source(args.source)
-        plan = _execute_analysis(args, use_cases or default_use_cases())
-        payload = plan.to_dict()
-        if args.output is None:
-            json.dump(payload, output_stream, indent=2)
+        plan = _execute_analysis(args, active_use_cases)
+        if args.json:
+            json.dump(plan.to_dict(), output_stream, indent=2)
             output_stream.write("\n")
-        else:
+        elif args.output is not None:
+            payload = plan.to_dict()
             with args.output.open("w", encoding="utf-8") as handle:
                 json.dump(payload, handle, indent=2)
                 handle.write("\n")
+            summary = active_use_cases.summarize_print_plan.execute(plan)
+            output_stream.write(_format_saved_result(summary, args.output))
+        else:
+            summary = active_use_cases.summarize_print_plan.execute(plan)
+            output_stream.write(format_print_plan_summary(summary))
         return 0
     except (ValueError, OSError) as error:
         print(f"error: {error}", file=error_stream)
@@ -135,14 +165,7 @@ def _execute_analysis(args: argparse.Namespace, use_cases: CliUseCases) -> objec
         batch_size=overhang_configuration.batch_size,
         scale_and_unit=scale_configuration,
     )
-    profile_options: dict[str, object] = {
-        "manufacturer": args.printer_manufacturer,
-        "model": args.printer_model,
-        "build_volume": Vector3(*args.build_volume),
-    }
-    if args.build_volume_unit is not None:
-        profile_options["build_volume_unit"] = args.build_volume_unit
-    printer_profile = PrinterProfile(**profile_options)
+    printer_profile = _resolve_printer_profile(args, use_cases)
     recommendation_configuration = PrintRecommendationConfiguration(
         maximum_recommended_overhang_area_percentage=args.max_recommended_overhang
     )
@@ -159,6 +182,138 @@ def _execute_analysis(args: argparse.Namespace, use_cases: CliUseCases) -> objec
         stl, scale, build_volume, overhang, orientation, recommendation
     )
     return plan
+
+
+def _resolve_printer_profile(
+    args: argparse.Namespace, use_cases: CliUseCases
+) -> PrinterProfile:
+    manual_values = (
+        args.printer_manufacturer,
+        args.printer_model,
+        args.build_volume,
+        args.build_volume_unit,
+    )
+    has_manual_values = any(value is not None for value in manual_values)
+    if args.printer is not None:
+        if has_manual_values:
+            raise ValueError(
+                "--printer cannot be combined with manual printer profile arguments"
+            )
+        return use_cases.get_printer_profile.execute(args.printer)
+
+    if not all(
+        value is not None
+        for value in (args.printer_manufacturer, args.printer_model, args.build_volume)
+    ):
+        raise ValueError(
+            "provide --printer or manual --printer-manufacturer, --printer-model, "
+            "and --build-volume arguments"
+        )
+    profile_options: dict[str, object] = {
+        "manufacturer": args.printer_manufacturer,
+        "model": args.printer_model,
+        "build_volume": Vector3(*args.build_volume),
+    }
+    if args.build_volume_unit is not None:
+        profile_options["build_volume_unit"] = args.build_volume_unit
+    return PrinterProfile(**profile_options)
+
+
+def format_printer_profiles(entries: tuple[PrinterProfileEntry, ...]) -> str:
+    """Render the already resolved profile entries for terminal users."""
+    lines = ["Available printer profiles:"]
+    for entry in entries:
+        profile = entry.profile
+        volume = profile.build_volume
+        lines.extend(
+            [
+                "",
+                entry.profile_id,
+                f"  Manufacturer: {profile.manufacturer}",
+                f"  Model: {profile.model}",
+                (
+                    "  Build volume: "
+                    f"{volume.x:g} × {volume.y:g} × {volume.z:g} "
+                    f"{profile.build_volume_unit}"
+                ),
+            ]
+        )
+    return "\n".join(lines) + "\n"
+
+
+def format_print_plan_summary(summary: PrintPlanSummaryResult) -> str:
+    """Render a compact presentation result without interpreting the print plan."""
+    facts = summary.facts
+    dimensions = facts.physical_dimensions
+    fit = _format_fit(facts.fits_build_volume)
+    orientation = facts.recommended_orientation or "Nenhuma"
+    height = (
+        f"{facts.print_height:.2f} {facts.physical_unit}"
+        if facts.print_height is not None
+        else "Não disponível"
+    )
+    overhang = (
+        f"{facts.overhang_area_percentage:.2f}%"
+        if facts.overhang_area_percentage is not None
+        else "Não calculável"
+    )
+    lines = [
+        "Análise concluída",
+        "",
+        "Modelo:",
+        summary.source_path,
+        "",
+        "Status:",
+        facts.recommendation_status.upper(),
+        "",
+        "Dimensões:",
+        (
+            f"{dimensions.x:.2f} × {dimensions.y:.2f} × {dimensions.z:.2f} "
+            f"{facts.physical_unit}"
+        ),
+        "",
+        "Cabe no volume de impressão:",
+        fit,
+        "",
+        "Orientação recomendada:",
+        orientation,
+        "",
+        "Altura de impressão:",
+        height,
+        "",
+        "Área de overhang:",
+        overhang,
+        "",
+        "Avisos:",
+    ]
+    if not summary.warnings:
+        lines.append("Nenhum")
+    else:
+        for warning in summary.warnings:
+            lines.extend(
+                [
+                    f"- [{warning.severity}] {warning.code}",
+                    f"  {warning.message}",
+                    f"  Origem: {warning.origin}",
+                ]
+            )
+    return "\n".join(lines) + "\n"
+
+
+def _format_saved_result(summary: PrintPlanSummaryResult, destination: Path) -> str:
+    return (
+        "Análise concluída\n\n"
+        "Resultado técnico salvo em:\n"
+        f"{destination}\n\n"
+        "Status:\n"
+        f"{summary.facts.recommendation_status.upper()}\n"
+    )
+
+
+def _format_fit(fits: bool | None) -> str:
+    if fits is None:
+        return "NÃO DISPONÍVEL"
+    return "SIM" if fits else "NÃO"
 
 
 def main() -> None:

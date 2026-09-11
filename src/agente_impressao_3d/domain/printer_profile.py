@@ -43,3 +43,15 @@ class PrinterProfile:
             "build_volume": self.build_volume.to_dict(),
             "build_volume_unit": self.build_volume_unit,
         }
+
+
+@dataclass(frozen=True, slots=True)
+class PrinterProfileEntry:
+    """A stable external identifier paired with a domain printer profile."""
+
+    profile_id: str
+    profile: PrinterProfile
+
+    def __post_init__(self) -> None:
+        if not self.profile_id.strip():
+            raise ValueError("profile_id must not be empty.")

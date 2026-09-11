@@ -8,8 +8,8 @@ Os cálculos determinísticos são separados de uma futura camada de IA: um agen
 
 - `domain`: modelos imutáveis, configurações, resultados JSON-friendly e portas; não depende de `trimesh`.
 - `application`: casos de uso e políticas determinísticas; não importa `trimesh`.
-- `infrastructure`: adapters de leitura baseados em `trimesh`.
-- `cli`: adapter de entrada com `argparse`, responsável apenas por argumentos, dependências e JSON.
+- `infrastructure`: adapters `trimesh` e catálogos embutidos, implementando portas do domínio.
+- `cli`: adapter de entrada com `argparse`, responsável por argumentos, dependências e apresentação.
 
 ```text
        AnalyzeStl
@@ -54,6 +54,14 @@ Os cálculos determinísticos são separados de uma futura camada de IA: um agen
 
 `PrinterProfile` descreve fabricante, modelo, volume e unidade. `AnalyzeBuildVolume` compara por eixo e informa `fits`, `fits_x`, `fits_y`, `fits_z`, `remaining_space` e `overflow`. Igualdade exata cabe; excessos geram `MODEL_EXCEEDS_BUILD_VOLUME`.
 
+### Perfis de impressora reutilizáveis
+
+O catálogo embutido resolve identificadores estáveis para `PrinterProfile`, sem rede, banco de dados ou arquivos externos. O domínio permanece independente de fabricantes e do catálogo concreto; o catálogo é apenas uma conveniência na infraestrutura.
+
+Perfis disponíveis inicialmente:
+
+- `bambu-lab-a1-mini` — Bambu Lab A1 Mini, 180 × 180 × 180 mm.
+
 ### Overhang
 
 `AnalyzeOverhang` processa faces em batches vetorizados. Informa contagens, área total, área de overhang e percentual usando um threshold configurável. A condição é equivalente a:
@@ -97,13 +105,28 @@ O `PrintPlanAnalysisResult` continua sendo o resultado técnico completo, com to
 
 ## CLI
 
-Use a CLI baseada somente em `argparse`:
+Use a CLI baseada somente em `argparse`. Liste os perfis reutilizáveis disponíveis com:
+
+```bash
+uv run agente-impressao-3d printers
+```
+
+Sem uma opção de saída técnica, a análise mostra no terminal um resumo humano baseado em `PrintPlanSummaryResult`. Um perfil embutido elimina a necessidade de repetir seus dados:
 
 ```bash
 uv run agente-impressao-3d analyze /caminho/modelo.stl \
-  --printer-manufacturer "Bambu Lab" \
-  --printer-model "A1 Mini" \
-  --build-volume 180 180 180 \
+  --printer bambu-lab-a1-mini \
+  --scale-factor 100 \
+  --physical-unit mm
+```
+
+Perfis manuais continuam suportados e exigem fabricante, modelo e volume:
+
+```bash
+uv run agente-impressao-3d analyze /caminho/modelo.stl \
+  --printer-manufacturer "Custom Printer" \
+  --printer-model "Example" \
+  --build-volume 220 220 250 \
   --build-volume-unit mm \
   --scale-factor 100 \
   --physical-unit mm \
@@ -112,15 +135,27 @@ uv run agente-impressao-3d analyze /caminho/modelo.stl \
   --max-recommended-overhang 25
 ```
 
-Sem `--output`, o JSON completo é escrito em `stdout`. Para salvar:
+O resumo apresenta status, dimensões físicas, compatibilidade com o volume, orientação e altura recomendadas, overhang e avisos. Ele é apenas uma apresentação e não recalcula resultados.
+
+### JSON técnico
+
+Para emitir o contrato técnico completo `PrintPlanAnalysisResult` no `stdout`, use `--json`:
 
 ```bash
 uv run agente-impressao-3d analyze /caminho/modelo.stl \
-  --printer-manufacturer "Bambu Lab" \
-  --printer-model "A1 Mini" \
-  --build-volume 180 180 180 \
+  --printer bambu-lab-a1-mini \
+  --json
+```
+
+Esse JSON é apropriado para automação, scripts, API, agentes e interfaces. Para salvar o mesmo JSON técnico completo em arquivo:
+
+```bash
+uv run agente-impressao-3d analyze /caminho/modelo.stl \
+  --printer bambu-lab-a1-mini \
   --output resultado.json
 ```
+
+Nesse modo o terminal mostra somente uma confirmação curta com o status. `--json` e `--output` não podem ser usados juntos: ambos destinam o mesmo resultado técnico completo. Também não é permitido combinar `--printer` com argumentos manuais de perfil; escolha exatamente um modo.
 
 Alternativamente:
 
@@ -132,7 +167,7 @@ Erros previsíveis, como arquivo ausente, extensão inválida, valores numérico
 
 ## Resultado
 
-Cada capability possui `to_dict()`. A CLI serializa o envelope final:
+Cada capability possui `to_dict()`. `PrintPlanAnalysisResult` é o envelope técnico canônico e contém todos os resultados especializados:
 
 ```json
 {
@@ -149,7 +184,7 @@ Cada capability possui `to_dict()`. A CLI serializa o envelope final:
 }
 ```
 
-`PrintPlanAnalysisResult` inclui todos os resultados especializados. A CLI apenas executa o fluxo e serializa `print_plan.to_dict()`.
+`PrintPlanSummaryResult` é o resumo compacto para apresentação na CLI e futuro consumo humano. Ele não substitui o `PrintPlanAnalysisResult`, não altera recomendações e não recalcula análises. O plano técnico permanece o contrato para automação, API, agentes e integração entre capabilities.
 
 ## Performance e limitações
 

@@ -7,6 +7,7 @@ from typing import Protocol
 from .models import MeshInspection
 from .overhang import FaceMetricsBatch
 from .orientation import TriangleGeometryBatch
+from .printer_profile import PrinterProfile, PrinterProfileEntry
 
 
 class MeshInspector(Protocol):
@@ -33,3 +34,11 @@ class TriangleGeometryReader(Protocol):
     """Opens one geometry source without exposing an implementation library."""
 
     def open(self, source_path: Path) -> TriangleGeometrySource: ...
+
+
+class PrinterProfileReader(Protocol):
+    """Looks up reusable printer profiles without exposing their storage."""
+
+    def get_profile(self, profile_id: str) -> PrinterProfile | None: ...
+
+    def list_profiles(self) -> tuple[PrinterProfileEntry, ...]: ...
