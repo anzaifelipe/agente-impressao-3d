@@ -53,6 +53,7 @@ Ferramentas disponíveis:
 - `get_cli_configuration`
 - `set_default_printer_profile`
 - `analyze_print_plan`
+- `analyze_surface_quality`
 
 O contrato de sucesso é:
 
@@ -66,9 +67,17 @@ E erros previsíveis usam:
 {"ok": false, "error": {"code": "INVALID_TOOL_ARGUMENTS", "message": "..."}}
 ```
 
-Os schemas são validados de forma mínima e explícita para as quatro ferramentas: campos obrigatórios, tipos básicos e propriedades inesperadas. Erros conhecidos da aplicação, como perfil inexistente e configuração ausente, recebem códigos estruturados; erros inesperados continuam visíveis ao integrador em vez de serem mascarados como sucesso.
+Os schemas são validados de forma mínima e explícita para as ferramentas: campos obrigatórios, tipos básicos e propriedades inesperadas. Erros conhecidos da aplicação, como perfil inexistente e configuração ausente, recebem códigos estruturados; erros inesperados continuam visíveis ao integrador em vez de serem mascarados como sucesso.
 
-`analyze_print_plan` recebe ao menos `{"path": "..."}` e pode receber `printer_profile`, `scale_factor`, `physical_unit`, `overhang_threshold`, `batch_size` e `max_recommended_overhang`. Ele chama a orquestração de aplicação que reutiliza `AnalyzeStl`, escala/unidade, volume, overhang, orientação, recomendação e `AnalyzePrintPlan`; não chama a CLI ou subprocessos.
+`analyze_print_plan` recebe ao menos `{"path": "..."}` e pode receber `printer_profile`, `scale_factor`, `physical_unit`, `overhang_threshold`, `batch_size`, `max_recommended_overhang`, `nozzle_diameter`, `minimum_layer_height`, `maximum_layer_height`, `target_normal_step` e `surface_region_count`. Ele chama a orquestração de aplicação que reutiliza `AnalyzeStl`, escala/unidade, volume, overhang, orientação, recomendação, qualidade de superfície e `AnalyzePrintPlan`; não chama a CLI ou subprocessos.
+
+`analyze_surface_quality` aceita `path` e controles de escala, batch, nozzle e alturas de camada. Para faces inclinadas, a métrica é `estimated_normal_step = layer_height × abs(normal_z)`: uma aproximação determinística de discretização, não uma medida de curvatura CAD ou defeito visual. Faces quase horizontais e verticais são excluídas; o desvio-padrão ponderado de `abs(normal_z)` é apenas um proxy de variação de orientação. As candidatas padrão 0,16 / 0,12 / 0,10 / 0,08 mm são filtradas pelos limites informados do nozzle.
+
+A saída preserva `regions` como faixas fixas de Z de fallback e acrescenta `critical_regions`: patches de células espaciais adjacentes de alta severidade. Cada patch contém limites espaciais, área afetada, severidade, recomendação e as faixas de fallback que ele atravessa. `cost_benefit` estima equivalentes de camada por patch e resolve sobreposições Z na agenda agregada; isso é uma estimativa geométrica, não previsão de tempo de slicer, movimento ou fluxo.
+
+A versão 3 mantém `estimated_normal_step = layer_height × abs(normal_z)` somente como diagnóstico legado. A seleção principal usa `estimated_geometric_error = curvature_z_proxy × layer_height² / 8`; `curvature_z_proxy` é a variação local estimada de `normal_z` em relação a Z numa grade espacial compacta, não curvatura CAD exata. A grade tem `maximum_spatial_cells` configurável (2.000.000 por padrão), limitando a memória adicional pelo número de células, não pelo número de arestas ou triângulos. Planos e paredes de normal constante não são selecionados apenas por inclinação.
+
+V3.1 preserva os patches em `critical_regions` e publica `consolidated_regions` como uma visão derivada para automação. A consolidação compara apenas bounds de patches, sem conectividade de triângulos: layer recomendado deve ser igual, a razão de severidade deve respeitar `region_merge_severity_ratio` e a distância Euclidiana entre bounds, incluindo a lacuna Z, deve respeitar `region_merge_distance`. Cada região consolidada lista os índices de patches auditáveis, área, bounds, severidade e erro geométrico máximo/médio. `consolidated_cost_benefit` compara a agenda geométrica formada pelos bounds consolidados com a agenda dos patches originais.
 
 ## Orquestração determinística
 
@@ -84,6 +93,7 @@ O contrato de request é `{"action": "...", "arguments": {...}}`. As ações dis
 - `get_configuration` → `get_cli_configuration`
 - `set_default_printer_profile` → `set_default_printer_profile`
 - `analyze_model` → `analyze_print_plan`
+- `analyze_surface_quality` → `analyze_surface_quality`
 
 O resultado preserva a intenção e a ferramenta selecionada:
 
@@ -253,7 +263,8 @@ Cada capability possui `to_dict()`. `PrintPlanAnalysisResult` é o envelope téc
     "build_volume": {},
     "overhang": {},
     "orientation": {},
-    "print_recommendation": {}
+    "print_recommendation": {},
+    "surface_quality": {}
   }
 }
 ```
@@ -269,4 +280,5 @@ Cada capability possui `to_dict()`. `PrintPlanAnalysisResult` é o envelope téc
 - Apenas seis orientações ortogonais são avaliadas; não há rotação arbitrária.
 - O sistema não gera suportes, G-code ou configurações de slicer e não substitui um slicer.
 - A orientação de normais depende do winding e permanece explicitamente não verificada.
+- A análise de qualidade de superfície usa orientação de facetas e faixas de Z; não reconstrói curvatura nem reconhece semanticamente cabeças, caudas ou outros recursos do modelo.
 - Contato com a mesa é uma estimativa geométrica, não uma garantia de adesão física.

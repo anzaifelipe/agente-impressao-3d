@@ -65,13 +65,13 @@ def fake_use_cases(
     calls: list[tuple[object, ...]], result_summary: PrintPlanSummaryResult | None = None,
     profile: PrinterProfile | None = None, configuration: CliConfiguration | None = None,
 ) -> CliUseCases:
-    stl, scale, build, overhang, orientation, recommendation = (
-        object() for _ in range(6)
+    stl, scale, build, overhang, orientation, recommendation, surface_quality = (
+        object() for _ in range(7)
     )
     return CliUseCases(
         FakeCase(stl, calls), FakeCase(scale, calls), FakeCase(build, calls),
         FakeCase(overhang, calls), FakeCase(orientation, calls),
-        FakeCase(recommendation, calls), FakeCase(FakePlan(), calls),
+        FakeCase(recommendation, calls), FakeCase(surface_quality, calls), FakeCase(FakePlan(), calls),
         FakeCase(result_summary or summary(), calls),
         FakeCase(profile or PrinterProfile("Bambu Lab", "A1 Mini", Vector3(180, 180, 180)), calls),
         FakeCase((PrinterProfileEntry("bambu-lab-a1-mini", PrinterProfile("Bambu Lab", "A1 Mini", Vector3(180, 180, 180))),), calls),
@@ -123,7 +123,7 @@ def test_default_output_uses_summary_and_renders_human_readable_text(
     assert "21.83%" in rendered
     assert "[warning] NORMAL_ORIENTATION_UNVERIFIED" in rendered
     assert "Normals were not verified." in rendered
-    assert len(calls) == 8
+    assert len(calls) == 9
 
 
 def test_json_writes_full_technical_plan_without_summary(tmp_path: Path) -> None:
@@ -141,7 +141,7 @@ def test_json_writes_full_technical_plan_without_summary(tmp_path: Path) -> None
     assert json.loads(stdout.getvalue())["analyses"]["overhang"]["facts"] == {
         "overhang_face_count": 0
     }
-    assert len(calls) == 7
+    assert len(calls) == 8
 
 
 def test_output_saves_full_plan_and_prints_short_human_confirmation(
@@ -369,7 +369,11 @@ def test_parser_and_cli_build_configs_run_full_flow(tmp_path: Path) -> None:
     assert overhang_configuration.batch_size == 10
     assert orientation_configuration.scale_and_unit is scale_configuration
     assert recommendation_configuration.maximum_recommended_overhang_area_percentage == 25
-    assert calls[6][3] is use_cases.analyze_overhang.result
+    surface_configuration = calls[6][1]
+    assert surface_configuration.scale_and_unit is scale_configuration
+    assert surface_configuration.batch_size == 10
+    assert calls[7][3] is use_cases.analyze_overhang.result
+    assert calls[7][6] is use_cases.analyze_surface_quality.result
 
 
 def test_reports_missing_source_and_invalid_build_volume_as_expected_errors(

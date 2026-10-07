@@ -16,6 +16,7 @@ ACTION_TO_TOOL: dict[str, str] = {
     "get_configuration": "get_cli_configuration",
     "set_default_printer_profile": "set_default_printer_profile",
     "analyze_model": "analyze_print_plan",
+    "analyze_surface_quality": "analyze_surface_quality",
 }
 
 

@@ -18,9 +18,6 @@ from agente_impressao_3d.tools.registry import (
 )
 
 
-TOOL_NAME = "get_cli_configuration"
-
-
 class _ForwardingFuncMetadata(FuncMetadata):
     """Keep MCP call arguments intact until the Tool Layer validates them."""
 
@@ -33,17 +30,25 @@ def create_server(
     *,
     configuration_path: Path | None = None,
 ) -> MCPServer:
-    """Create the one-tool MCP adapter backed by the existing Tool Layer."""
+    """Create a compatible MCP adapter exposing the registered Tool Layer."""
     tools = build_tools(services or default_tool_services(configuration_path))
-    definition = tools[TOOL_NAME]
     server = MCPServer("agente-impressao-3d")
-
-    @server.tool(name=definition.name, description=definition.description)
-    def get_cli_configuration(**arguments: Any) -> dict[str, Any]:
-        return execute_tool(tools, TOOL_NAME, arguments)
-
-    _publish_tool_layer_schema(server, definition)
+    for definition in tools.values():
+        _register_tool(server, tools, definition)
     return server
+
+
+def _register_tool(
+    server: MCPServer, tools: dict[str, ToolDefinition], definition: ToolDefinition
+) -> None:
+    tool_name = definition.name
+
+    def handler(**arguments: Any) -> dict[str, Any]:
+        return execute_tool(tools, tool_name, arguments)
+
+    handler.__name__ = definition.name
+    server.tool(name=definition.name, description=definition.description)(handler)
+    _publish_tool_layer_schema(server, definition)
 
 
 def run_stdio() -> None:

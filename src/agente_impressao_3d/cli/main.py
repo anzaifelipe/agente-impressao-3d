@@ -18,6 +18,7 @@ from agente_impressao_3d.application.analyze_print_recommendation import (
 )
 from agente_impressao_3d.application.analyze_scale_and_unit import AnalyzeScaleAndUnit
 from agente_impressao_3d.application.analyze_stl import AnalyzeStl
+from agente_impressao_3d.application.analyze_surface_quality import AnalyzeSurfaceQuality
 from agente_impressao_3d.application.execute_print_plan_analysis import (
     ExecutePrintPlanAnalysis,
 )
@@ -35,6 +36,7 @@ from agente_impressao_3d.domain.overhang import OverhangAnalysisConfiguration
 from agente_impressao_3d.domain.print_recommendation import PrintRecommendationConfiguration
 from agente_impressao_3d.domain.printer_profile import PrinterProfile, PrinterProfileEntry
 from agente_impressao_3d.domain.scale_and_unit import ScaleAndUnitConfiguration
+from agente_impressao_3d.domain.surface_quality import SurfaceQualityConfiguration
 from agente_impressao_3d.domain.print_plan_summary import PrintPlanSummaryResult
 from agente_impressao_3d.infrastructure.trimesh_face_metrics_reader import (
     TrimeshFaceMetricsReader,
@@ -66,6 +68,7 @@ class CliUseCases:
     analyze_overhang: Executable
     analyze_orientation: Executable
     analyze_print_recommendation: Executable
+    analyze_surface_quality: Executable
     analyze_print_plan: Executable
     summarize_print_plan: Executable
     get_printer_profile: Executable
@@ -102,6 +105,11 @@ def build_parser() -> argparse.ArgumentParser:
     analyze.add_argument("--overhang-threshold", type=float)
     analyze.add_argument("--batch-size", type=int)
     analyze.add_argument("--max-recommended-overhang", type=float)
+    analyze.add_argument("--nozzle-diameter", type=float)
+    analyze.add_argument("--minimum-layer-height", type=float)
+    analyze.add_argument("--maximum-layer-height", type=float)
+    analyze.add_argument("--target-normal-step", type=float)
+    analyze.add_argument("--surface-region-count", type=int)
     analyze.add_argument("--json", action="store_true", help="write the full technical print plan as JSON to stdout")
     analyze.add_argument("--output", type=Path)
     return parser
@@ -118,6 +126,7 @@ def default_use_cases() -> CliUseCases:
         analyze_overhang=AnalyzeOverhang(TrimeshFaceMetricsReader()),
         analyze_orientation=AnalyzeOrientation(TrimeshTriangleGeometryReader()),
         analyze_print_recommendation=AnalyzePrintRecommendation(),
+        analyze_surface_quality=AnalyzeSurfaceQuality(TrimeshTriangleGeometryReader()),
         analyze_print_plan=AnalyzePrintPlan(),
         summarize_print_plan=SummarizePrintPlan(),
         get_printer_profile=GetPrinterProfile(profile_reader),
@@ -200,6 +209,15 @@ def _execute_analysis(args: argparse.Namespace, use_cases: CliUseCases) -> objec
     recommendation_configuration = PrintRecommendationConfiguration(
         maximum_recommended_overhang_area_percentage=args.max_recommended_overhang
     )
+    surface_defaults = SurfaceQualityConfiguration()
+    surface_configuration = SurfaceQualityConfiguration(
+        nozzle_diameter=args.nozzle_diameter if args.nozzle_diameter is not None else surface_defaults.nozzle_diameter,
+        minimum_layer_height=args.minimum_layer_height if args.minimum_layer_height is not None else surface_defaults.minimum_layer_height,
+        maximum_layer_height=args.maximum_layer_height if args.maximum_layer_height is not None else surface_defaults.maximum_layer_height,
+        target_normal_step=args.target_normal_step if args.target_normal_step is not None else surface_defaults.target_normal_step,
+        region_count=args.surface_region_count if args.surface_region_count is not None else surface_defaults.region_count,
+        batch_size=overhang_configuration.batch_size, scale_and_unit=scale_configuration,
+    )
 
     return ExecutePrintPlanAnalysis(
         use_cases.analyze_stl,
@@ -208,6 +226,7 @@ def _execute_analysis(args: argparse.Namespace, use_cases: CliUseCases) -> objec
         use_cases.analyze_overhang,
         use_cases.analyze_orientation,
         use_cases.analyze_print_recommendation,
+        use_cases.analyze_surface_quality,
         use_cases.analyze_print_plan,
     ).execute(
         args.source,
@@ -216,6 +235,7 @@ def _execute_analysis(args: argparse.Namespace, use_cases: CliUseCases) -> objec
         overhang_configuration,
         orientation_configuration,
         recommendation_configuration,
+        surface_configuration,
     )
 
 

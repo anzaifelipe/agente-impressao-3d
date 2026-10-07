@@ -75,6 +75,18 @@ def test_analyzes_fixture_with_the_analyze_model_intent(tmp_path: Path) -> None:
     assert "analyses" in result.result
 
 
+def test_analyzes_surface_quality_with_its_explicit_intent(tmp_path: Path) -> None:
+    result = orchestrator(tmp_path).execute(
+        OrchestrationRequest("analyze_surface_quality", {
+            "path": "tests/fixtures/cube_ascii.stl", "batch_size": 10,
+        })
+    )
+
+    assert result.ok is True
+    assert result.tool == "analyze_surface_quality"
+    assert "regions" in result.result
+
+
 def test_unknown_action_does_not_select_a_tool(tmp_path: Path) -> None:
     result = orchestrator(tmp_path).execute(
         OrchestrationRequest("unknown_action", {})

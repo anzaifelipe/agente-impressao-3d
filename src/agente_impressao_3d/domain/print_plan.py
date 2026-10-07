@@ -11,6 +11,7 @@ from .overhang import OverhangAnalysisResult
 from .orientation import OrientationAnalysisResult
 from .print_recommendation import PrintRecommendationResult
 from .scale_and_unit import ScaleAndUnitAnalysisResult
+from .surface_quality import SurfaceQualityAnalysisResult
 
 
 @dataclass(frozen=True, slots=True)
@@ -23,6 +24,7 @@ class PrintPlanAnalysisResult:
     overhang_analysis: OverhangAnalysisResult
     orientation_analysis: OrientationAnalysisResult
     print_recommendation_analysis: PrintRecommendationResult
+    surface_quality_analysis: SurfaceQualityAnalysisResult | None = None
     schema_version: str = "1.0"
 
     def to_dict(self) -> dict[str, Any]:
@@ -36,5 +38,9 @@ class PrintPlanAnalysisResult:
                 "overhang": self.overhang_analysis.to_dict(),
                 "orientation": self.orientation_analysis.to_dict(),
                 "print_recommendation": self.print_recommendation_analysis.to_dict(),
+                **(
+                    {"surface_quality": self.surface_quality_analysis.to_dict()}
+                    if self.surface_quality_analysis is not None else {}
+                ),
             },
         }

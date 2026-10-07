@@ -13,6 +13,7 @@ from agente_impressao_3d.application.analyze_print_plan import AnalyzePrintPlan
 from agente_impressao_3d.application.analyze_print_recommendation import AnalyzePrintRecommendation
 from agente_impressao_3d.application.analyze_scale_and_unit import AnalyzeScaleAndUnit
 from agente_impressao_3d.application.analyze_stl import AnalyzeStl
+from agente_impressao_3d.application.analyze_surface_quality import AnalyzeSurfaceQuality
 from agente_impressao_3d.application.cli_configuration import (
     CliConfigurationNotFoundError,
     GetCliConfiguration,
@@ -34,6 +35,7 @@ from agente_impressao_3d.infrastructure.trimesh_face_metrics_reader import Trime
 from agente_impressao_3d.infrastructure.trimesh_inspector import TrimeshMeshInspector
 from agente_impressao_3d.infrastructure.trimesh_triangle_geometry_reader import TrimeshTriangleGeometryReader
 from agente_impressao_3d.tools.analyze_print_plan import build_tool as analyze_print_plan_tool
+from agente_impressao_3d.tools.analyze_surface_quality import build_tool as analyze_surface_quality_tool
 from agente_impressao_3d.tools.contracts import ToolDefinition
 from agente_impressao_3d.tools.get_cli_configuration import build_tool as get_configuration_tool
 from agente_impressao_3d.tools.list_printer_profiles import build_tool as list_profiles_tool
@@ -67,6 +69,7 @@ def default_tool_services(
             AnalyzeOverhang(TrimeshFaceMetricsReader()),
             AnalyzeOrientation(TrimeshTriangleGeometryReader()),
             AnalyzePrintRecommendation(),
+            AnalyzeSurfaceQuality(TrimeshTriangleGeometryReader()),
             AnalyzePrintPlan(),
         ),
     )
@@ -83,6 +86,7 @@ def build_tools(services: ToolServices) -> dict[str, ToolDefinition]:
             services.get_printer_profile,
             services.get_cli_configuration,
         ),
+        analyze_surface_quality_tool(services.execute_print_plan_analysis.analyze_surface_quality),
     )
     return {definition.name: definition for definition in definitions}
 

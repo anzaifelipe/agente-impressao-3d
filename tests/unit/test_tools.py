@@ -19,6 +19,7 @@ def test_tools_expose_explicit_metadata_and_minimal_schemas(tmp_path: Path) -> N
         "get_cli_configuration",
         "set_default_printer_profile",
         "analyze_print_plan",
+        "analyze_surface_quality",
     }
     for name, tool in registry.items():
         assert tool.name == name
@@ -119,4 +120,17 @@ def test_analyzes_existing_fixture_through_application_pipeline(tmp_path: Path) 
     assert set(result["result"]["analyses"]) == {
         "stl", "scale_and_unit", "build_volume", "overhang", "orientation",
         "print_recommendation",
+        "surface_quality",
     }
+
+
+def test_analyzes_surface_quality_with_nozzle_limits(tmp_path: Path) -> None:
+    result = execute_tool(
+        tools(tmp_path), "analyze_surface_quality", {
+            "path": "tests/fixtures/cube_ascii.stl", "minimum_layer_height": 0.10,
+            "maximum_layer_height": 0.16, "batch_size": 10,
+        }
+    )
+
+    assert result["ok"] is True
+    assert result["result"]["configuration"]["allowed_layer_heights"] == [0.16, 0.12, 0.1]

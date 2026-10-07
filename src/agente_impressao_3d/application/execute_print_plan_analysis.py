@@ -18,6 +18,10 @@ from agente_impressao_3d.domain.scale_and_unit import (
     ScaleAndUnitAnalysisResult,
     ScaleAndUnitConfiguration,
 )
+from agente_impressao_3d.domain.surface_quality import (
+    SurfaceQualityAnalysisResult,
+    SurfaceQualityConfiguration,
+)
 
 
 class StlRunner(Protocol):
@@ -57,6 +61,12 @@ class RecommendationRunner(Protocol):
     ) -> PrintRecommendationResult: ...
 
 
+class SurfaceQualityRunner(Protocol):
+    def execute(
+        self, source_path: Path, configuration: SurfaceQualityConfiguration
+    ) -> SurfaceQualityAnalysisResult: ...
+
+
 class PrintPlanRunner(Protocol):
     def execute(
         self,
@@ -66,6 +76,7 @@ class PrintPlanRunner(Protocol):
         overhang_analysis: OverhangAnalysisResult,
         orientation_analysis: OrientationAnalysisResult,
         recommendation_analysis: PrintRecommendationResult,
+        surface_quality_analysis: SurfaceQualityAnalysisResult | None = None,
     ) -> PrintPlanAnalysisResult: ...
 
 
@@ -79,6 +90,7 @@ class ExecutePrintPlanAnalysis:
     analyze_overhang: OverhangRunner
     analyze_orientation: OrientationRunner
     analyze_print_recommendation: RecommendationRunner
+    analyze_surface_quality: SurfaceQualityRunner
     analyze_print_plan: PrintPlanRunner
 
     def execute(
@@ -89,6 +101,7 @@ class ExecutePrintPlanAnalysis:
         overhang_configuration: OverhangAnalysisConfiguration,
         orientation_configuration: OrientationAnalysisConfiguration,
         recommendation_configuration: PrintRecommendationConfiguration,
+        surface_quality_configuration: SurfaceQualityConfiguration | None = None,
     ) -> PrintPlanAnalysisResult:
         stl = self.analyze_stl.execute(source_path)
         scale = self.analyze_scale_and_unit.execute(stl, scale_and_unit_configuration)
@@ -100,6 +113,12 @@ class ExecutePrintPlanAnalysis:
         recommendation = self.analyze_print_recommendation.execute(
             stl, orientation, recommendation_configuration
         )
+        surface_quality = self.analyze_surface_quality.execute(
+            source_path, surface_quality_configuration or SurfaceQualityConfiguration(
+                scale_and_unit=scale_and_unit_configuration,
+                batch_size=overhang_configuration.batch_size,
+            )
+        )
         return self.analyze_print_plan.execute(
-            stl, scale, build_volume, overhang, orientation, recommendation
+            stl, scale, build_volume, overhang, orientation, recommendation, surface_quality
         )

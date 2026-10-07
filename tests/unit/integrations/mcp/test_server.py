@@ -13,7 +13,7 @@ def registry(tmp_path: Path):
     return build_tools(default_tool_services(tmp_path / "config.json"))
 
 
-def test_exposes_only_get_cli_configuration_with_the_tool_layer_schema(
+def test_exposes_tool_layer_operations_with_their_tool_layer_schemas(
     tmp_path: Path,
 ) -> None:
     tools = registry(tmp_path)
@@ -21,14 +21,16 @@ def test_exposes_only_get_cli_configuration_with_the_tool_layer_schema(
 
     exposed = asyncio.run(server.list_tools())
 
-    assert [tool.name for tool in exposed] == ["get_cli_configuration"]
-    assert exposed[0].input_schema == tools["get_cli_configuration"].input_schema
-    assert exposed[0].input_schema == {
+    by_name = {tool.name: tool for tool in exposed}
+    assert set(by_name) == set(tools)
+    assert by_name["get_cli_configuration"].input_schema == tools["get_cli_configuration"].input_schema
+    assert by_name["get_cli_configuration"].input_schema == {
         "type": "object",
         "properties": {},
         "required": [],
         "additionalProperties": False,
     }
+    assert by_name["analyze_surface_quality"].input_schema == tools["analyze_surface_quality"].input_schema
 
 
 def test_forwards_empty_arguments_to_the_existing_tool_layer(

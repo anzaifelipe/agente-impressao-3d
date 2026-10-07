@@ -9,6 +9,7 @@ from agente_impressao_3d.domain.orientation import OrientationAnalysisResult
 from agente_impressao_3d.domain.print_plan import PrintPlanAnalysisResult
 from agente_impressao_3d.domain.print_recommendation import PrintRecommendationResult
 from agente_impressao_3d.domain.scale_and_unit import ScaleAndUnitAnalysisResult
+from agente_impressao_3d.domain.surface_quality import SurfaceQualityAnalysisResult
 
 
 @dataclass(frozen=True, slots=True)
@@ -23,6 +24,7 @@ class AnalyzePrintPlan:
         overhang_analysis: OverhangAnalysisResult,
         orientation_analysis: OrientationAnalysisResult,
         print_recommendation_analysis: PrintRecommendationResult,
+        surface_quality_analysis: SurfaceQualityAnalysisResult | None = None,
     ) -> PrintPlanAnalysisResult:
         source_paths = {
             stl_analysis.source_path,
@@ -31,6 +33,7 @@ class AnalyzePrintPlan:
             overhang_analysis.source_path,
             orientation_analysis.source_path,
             print_recommendation_analysis.source_path,
+            *(() if surface_quality_analysis is None else (surface_quality_analysis.source_path,)),
         }
         if len(source_paths) != 1:
             raise ValueError("All print-plan analyses must have the same source_path.")
@@ -41,4 +44,5 @@ class AnalyzePrintPlan:
             overhang_analysis=overhang_analysis,
             orientation_analysis=orientation_analysis,
             print_recommendation_analysis=print_recommendation_analysis,
+            surface_quality_analysis=surface_quality_analysis,
         )
